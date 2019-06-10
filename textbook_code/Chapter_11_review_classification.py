@@ -1,10 +1,10 @@
 import numpy as np
 np.random.seed(1)
 
-with open('data/reviews.txt') as f:
+with open('../data/reviews.txt') as f:
     raw_reviews = f.readlines()
 
-with open('data/labels.txt') as f:
+with open('../data/labels.txt') as f:
     raw_labels = f.readlines()
 
 tokens = list(map(lambda x: set(x.split(' ')), raw_reviews))

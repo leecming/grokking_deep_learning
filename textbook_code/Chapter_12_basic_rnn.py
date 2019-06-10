@@ -8,15 +8,15 @@ def softmax(x_):
 
 
 word_vects = {}
-word_vects['yankees'] = np.array([0., 0., 0.])
-word_vects['bears'] = np.array([0., 0., 0.])
-word_vects['braves'] = np.array([0., 0., 0.])
-word_vects['red'] = np.array([0., 0., 0.])
-word_vects['sox'] = np.array([0., 0., 0.])
-word_vects['lose'] = np.array([0., 0., 0.])
-word_vects['defeat'] = np.array([0., 0., 0.])
-word_vects['beat'] = np.array([0., 0., 0.])
-word_vects['tie'] = np.array([0., 0., 0.])
+word_vects['yankees'] = np.array([[0., 0., 0.]])
+word_vects['bears'] = np.array([[0., 0., 0.]])
+word_vects['braves'] = np.array([[0., 0., 0.]])
+word_vects['red'] = np.array([[0., 0., 0.]])
+word_vects['sox'] = np.array([[0., 0., 0.]])
+word_vects['lose'] = np.array([[0., 0., 0.]])
+word_vects['defeat'] = np.array([[0., 0., 0.]])
+word_vects['beat'] = np.array([[0., 0., 0.]])
+word_vects['tie'] = np.array([[0., 0., 0.]])
 
 sent2output = np.random.rand(3, len(word_vects))
 identity = np.eye(3)

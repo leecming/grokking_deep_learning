@@ -5,7 +5,7 @@ import pickle as pl
 
 np.random.seed(1)
 random.seed(1)
-f = open('data/reviews.txt')
+f = open('../data/reviews.txt')
 raw_reviews = f.readlines()
 f.close()
 
@@ -19,7 +19,7 @@ vocab = list(set(map(lambda x: x[0], wordcnt.most_common())))
 word2index = {}
 for i, word in enumerate(vocab):
     word2index[word] = i
-pl.dump(word2index, open('data/word2index_imdb.p', 'wb'))
+pl.dump(word2index, open('../data/word2index_imdb.p', 'wb'))
 
 concatenated = list()
 input_dataset = list()
@@ -85,5 +85,5 @@ for rev_i, review in enumerate(input_dataset * iterations):
     sys.stdout.write('\rProgress:' + str(rev_i / float(len(input_dataset)
                                                        * iterations)))
 print(similar('terrible'))
-np.save('data/imdb_weights_0_1.npy', weights_0_1)
-np.save('data/imdb_weights_1_2.npy', weights_1_2)
+np.save('../data/imdb_weights_0_1.npy', weights_0_1)
+np.save('../data/imdb_weights_1_2.npy', weights_1_2)

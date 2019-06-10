@@ -1,7 +1,4 @@
-import sys
 import numpy as np
-import uuid
-
 np.random.seed(0)
 
 
@@ -21,7 +18,7 @@ class Embedding(Layer):
         self.dim = dim
 
         weight = (np.random.rand(vocab_size, dim) - 0.5) / dim
-        self.weight = Tensor(weight, autograd=True, name='embedding')
+        self.weight = Tensor(weight, autograd=True)
 
         self.parameters.append(self.weight)
 
@@ -30,26 +27,17 @@ class Embedding(Layer):
 
 
 class Linear(Layer):
-    def __init__(self, n_inputs, n_outputs, bias=True, name=None):
+    def __init__(self, n_inputs, n_outputs):
         super().__init__()
-
-        self.use_bias = bias
-
         W = np.random.randn(n_inputs, n_outputs) * np.sqrt(2.0 / n_inputs)
-        self.weight = Tensor(W, autograd=True, name=name)
-
-        if self.use_bias:
-            self.bias = Tensor(np.zeros(n_outputs), autograd=True, name=name)
+        self.weight = Tensor(W, autograd=True)
+        self.bias = Tensor(np.zeros(n_outputs), autograd=True)
 
         self.parameters.append(self.weight)
-
-        if self.use_bias:
-            self.parameters.append(self.bias)
+        self.parameters.append(self.bias)
 
     def forward(self, input):
-        if self.use_bias:
-            return input.mm(self.weight)+self.bias.expand(0, len(input.data))
-        return input.mm(self.weight)
+        return input.mm(self.weight)+self.bias.expand(0, len(input.data))
 
 
 class Sequential(Layer):
@@ -111,8 +99,7 @@ class Tensor:
                  autograd=False,
                  creators=None,
                  creation_op=None,
-                 id=None,
-                 name=None):
+                 id=None):
         self.data = np.array(data)
         self.creation_op = creation_op
         self.creators = creators  # list of parent Tensor objects
@@ -120,11 +107,8 @@ class Tensor:
         self.autograd = autograd
         self.children = {}  # mapping of child id : count of gradients received
         if id is None:
-            id = np.random.randint(0, 10000000)
+            id = np.random.randint(0, 100000)
         self.id = id
-
-        if name is None:
-            self.name = '_'
 
         # add itself to creators' children mappings
         if creators is not None:
@@ -150,13 +134,6 @@ class Tensor:
 
             if grad_origin is not None:
                 if self.children[grad_origin.id] == 0:
-                    # return
-                    print('origin id: {}'.format(grad_origin.id))
-                    print('self id: {}'.format(self.id))
-                    print('self creation_op: {}'.format(self.creation_op))
-                    print('# creators: {}'.format(len(self.creators)))
-                    for c in self.creators:
-                        print('Creator id {}, creation_op {}'.format(c.id, c.creation_op))
                     raise Exception('cannot backprop more than once')
                 else:
                     self.children[grad_origin.id] -= 1
@@ -173,8 +150,7 @@ class Tensor:
                     self.creators[1].backward(self.grad, self)
 
                 if self.creation_op == 'neg':
-                    # self.creators[0].backward(self.grad.__neg__())
-                    self.creators[0].backward(self.grad.__neg__(), self)
+                    self.creators[0].backward(self.grad.__neg__())
 
                 if self.creation_op == 'sub':
                     self.creators[0].backward(self.grad, self)
@@ -188,37 +164,31 @@ class Tensor:
 
                 if "sum" in self.creation_op:
                     dim = int(self.creation_op.split("_")[1])
-                    # self.creators[0].backward(self.grad.expand(dim, self.creators[0].data.shape[dim]))
-                    self.creators[0].backward(self.grad.expand(dim, self.creators[0].data.shape[dim]), self)
+                    self.creators[0].backward(self.grad.expand(dim,
+                                                               self.creators[0].data.shape[dim]))
 
                 if 'expand' in self.creation_op:
                     dim = int(self.creation_op.split('_')[1])
-                    # self.creators[0].backward(self.grad.sum(dim))
-                    self.creators[0].backward(self.grad.sum(dim), self)
+                    self.creators[0].backward(self.grad.sum(dim))
 
                 if self.creation_op == 'transpose':
-                    # self.creators[0].backward(self.grad.transpose())
-                    self.creators[0].backward(self.grad.transpose(), self)
+                    self.creators[0].backward(self.grad.transpose())
 
                 if self.creation_op == 'mm':
                     act = self.creators[0]
                     weights = self.creators[1]
                     new = self.grad.mm(weights.transpose())
-                    # act.backward(new)
-                    act.backward(new, self)
+                    act.backward(new)
                     new = self.grad.transpose().mm(act).transpose()
-                    # weights.backward(new)
-                    weights.backward(new, self)
+                    weights.backward(new)
 
                 if self.creation_op == 'sigmoid':
                     ones = Tensor(np.ones_like(self.grad.data))
-                    # self.creators[0].backward(self.grad * (self * (ones - self)))
-                    self.creators[0].backward(self.grad * (self * (ones - self)), self)
+                    self.creators[0].backward(self.grad * (self * (ones - self)))
 
                 if self.creation_op == 'tanh':
                     ones = Tensor(np.ones_like(self.grad.data))
-                    # self.creators[0].backward(self.grad * (ones - (self * self)))
-                    self.creators[0].backward(self.grad * (ones - (self * self)), self)
+                    self.creators[0].backward(self.grad * (ones - (self * self)))
 
                 if self.creation_op == 'index_select':
                     new_grad = np.zeros_like(self.creators[0].data)
@@ -226,13 +196,11 @@ class Tensor:
                     grad_ = grad.data.reshape(len(indices_), -1)
                     for i in range(len(indices_)):
                         new_grad[indices_[i]] += grad_[i]
-                    # self.creators[0].backward(Tensor(new_grad))
-                    self.creators[0].backward(Tensor(new_grad), self)
+                    self.creators[0].backward(Tensor(new_grad))
 
                 if self.creation_op == 'cross_entropy':
                     dx = self.softmax_output - self.target_dist
-                    # self.creators[0].backward(Tensor(dx))
-                    self.creators[0].backward(Tensor(dx), self)
+                    self.creators[0].backward(Tensor(dx))
 
     def __add__(self, other):
         if self.autograd and other.autograd:
@@ -318,13 +286,6 @@ class Tensor:
                           creation_op='tanh')
         return Tensor(np.tanh(self.data))
 
-    def softmax(self):
-        temp = np.exp(self.data)
-        softmax_output = temp / np.sum(temp,
-                                       axis=len(self.data.shape) - 1,
-                                       keepdims=True)
-        return softmax_output
-
     def index_select(self, indices):
         if self.autograd:
             new = Tensor(self.data[indices.data],
@@ -380,9 +341,9 @@ class RNNCell(Layer):
         else:
             raise Exception("Non-linearity not found")
 
-        self.w_ih = Linear(n_inputs, n_hidden, name='RNN w_ih')
-        self.w_hh = Linear(n_hidden, n_hidden, name='RNN w_hh')
-        self.w_ho = Linear(n_hidden, n_output, name='RNN w_ho')
+        self.w_ih = Linear(n_inputs, n_hidden)
+        self.w_hh = Linear(n_hidden, n_hidden)
+        self.w_ho = Linear(n_hidden, n_output)
 
         self.parameters += self.w_ih.get_parameters()
         self.parameters += self.w_hh.get_parameters()
@@ -396,7 +357,7 @@ class RNNCell(Layer):
         return output, new_hidden
 
     def init_hidden(self, batch_size=1):
-        return Tensor(np.zeros((batch_size, self.n_hidden)), autograd=True)
+        return Tensor(np.zeros((batch_size,self.n_hidden)),autograd=True)
 
 
 class Tanh(Layer):
@@ -414,117 +375,106 @@ class Sigmoid(Layer):
     def forward(self, input):
         return input.sigmoid()
 
+# x = Tensor(np.eye(5), autograd=True)
+# x.index_select(Tensor([[1, 2, 3], [2, 3, 4]])).backward()
+# print(x.grad)
 
-with open('data/shakespear.txt', 'r') as f:
-    raw = f.read()
 
-vocab = list(set(raw))
+# data = Tensor(np.array([1, 2, 1, 2]), autograd=True)
+# target = Tensor(np.array(([0], [1], [0], [1])), autograd=True)
+#
+# embed = Embedding(5, 3)
+# model = Sequential([embed, Tanh(), Linear(3, 1), Sigmoid()])
+# criterion = MSELoss()
+#
+# optim = SGD(parameters=model.get_parameters(), alpha=0.5)
+#
+# for i in range(10):
+#     pred = model.forward(data)
+#     loss = criterion.forward(pred, target)
+#     loss.backward(Tensor(np.ones_like(loss.data)))
+#     optim.step()
+#     print(loss)
+
+# data = Tensor(np.array([1, 2, 1, 2]), autograd=True)
+# target = Tensor(np.array([0, 1, 0, 1]), autograd=True)
+#
+# model = Sequential([Embedding(3, 3), Tanh(), Linear(3, 4)])
+# criterion = CrossEntropyLoss()
+# optim = SGD(parameters=model.get_parameters(), alpha=0.1)
+#
+# for i in range(10):
+#     pred = model.forward(data)
+#     loss = criterion.forward(pred, target)
+#     loss.backward(Tensor(np.ones_like(loss.data)))
+#     optim.step()
+#     print(loss)
+
+import sys,random,math
+from collections import Counter
+
+with open('../data/tasksv11/en/qa1_single-supporting-fact_train.txt', 'r') as f:
+    raw = f.readlines()
+
+tokens = list()
+for line in raw[:1000]:
+    tokens.append(line.lower().replace("\n", "").split(" ")[1:])
+
+new_tokens = list()
+for line in tokens:
+    new_tokens.append(['-'] * (6 - len(line)) + line)
+tokens = new_tokens
+
+vocab = set()
+for sent in tokens:
+    for word in sent:
+        vocab.add(word)
+vocab = list(vocab)
+
 word2index = {}
 for i, word in enumerate(vocab):
     word2index[word] = i
-indices = np.array(list(map(lambda x: word2index[x], raw)))
 
-embed = Embedding(vocab_size=len(vocab), dim=512)
-model = RNNCell(n_inputs=512, n_hidden=512, n_output=len(vocab))
 
+def words2indices(sentence):
+    idx = list()
+    for word in sentence:
+        idx.append(word2index[word])
+    return idx
+
+
+indices = list()
+for line in tokens:
+    idx = list()
+    for w in line:
+        idx.append(word2index[w])
+    indices.append(idx)
+
+data = np.array(indices)
+
+embed = Embedding(vocab_size=len(vocab),dim=16)
+model = RNNCell(n_inputs=16, n_hidden=16, n_output=len(vocab))
 criterion = CrossEntropyLoss()
-optim = SGD(parameters=model.get_parameters() + embed.get_parameters(), alpha=0.01)
+params = model.get_parameters() + embed.get_parameters()
+optim = SGD(parameters=params, alpha=0.05)
 
-batch_size = 32
-bptt = 16
-n_batches = int((indices.shape[0] / batch_size))
-trimmed_indices = indices[:n_batches*batch_size]
-# batch_indices: each column represents a sub-sequence from indices -> continuous
-batched_indices = trimmed_indices.reshape(batch_size, n_batches)
-batched_indices = batched_indices.transpose()
+for iter in range(1000):
+    batch_size = 100
+    total_loss = 0
 
-input_batched_indices = batched_indices[:-1]
-target_batched_indices = batched_indices[1:]
+    hidden = model.init_hidden(batch_size=batch_size)
 
-n_bptt = int((n_batches - 1) / bptt)
-input_batches = input_batched_indices[:n_bptt*bptt]
-input_batches = input_batches.reshape(n_bptt, bptt, batch_size)
-target_batches = target_batched_indices[:n_bptt*bptt]
-target_batches = target_batches.reshape(n_bptt, bptt, batch_size)
+    for t in range(5):
+        input = Tensor(data[0:batch_size, t], autograd=True)
+        rnn_input = embed.forward(input=input)
+        output, hidden = model.forward(input=rnn_input, hidden=hidden)
 
-print('indices shape: {}'.format(indices.shape))
-print('number batches: {}'.format(n_batches))
-print('trimmed indices shape: {}'.format(trimmed_indices.shape))
-print('batched indices shape: {}'.format(batched_indices.shape))
-print('input batched indices: {}'.format(input_batched_indices.shape))
-print('target batched indices: {}'.format(target_batched_indices.shape))
-print('input batches shape: {}'.format(input_batches.shape))
-print('target batches shape: {}'.format(target_batches.shape))
-
-print('input batch 0: {}'.format(input_batches[0, :, 0]))
-print('target batch 0: {}'.format(target_batches[0, :, 0]))
-print('raw indices: {}'.format(indices[:16]))
-
-
-def train(iterations=100):
-    for iter in range(iterations):
-        total_loss = 0
-        n_loss = 0
-
-        hidden = model.init_hidden(batch_size=batch_size)
-        for batch_i in range(len(input_batches)):
-            hidden = Tensor(hidden.data, autograd=True)
-            loss = None
-            for t in range(bptt):
-                # print('t: {}'.format(t))
-                input = Tensor(input_batches[batch_i][t], autograd=True)
-                # print('input shape: {}'.format(input.data.shape))
-                rnn_input = embed.forward(input=input)
-                # print('embedded shape: {}'.format(rnn_input.data.shape))
-                output, hidden = model.forward(input=rnn_input,
-                                               hidden=hidden)
-                # print('hidden shape: {}'.format(hidden.data.shape))
-                # print('output shape: {}'.format(output.data.shape))
-
-                target = Tensor(target_batches[batch_i][t], autograd=True)
-                batch_loss = criterion.forward(output, target)
-                # batch_loss.backward() # delete
-
-                if t == 0:
-                    loss = batch_loss
-                else:
-                    loss = loss + batch_loss
-
-            loss.backward()
-            optim.step()
-            total_loss += loss.data
-
-            log = '\r Iter:{}'.format(iter)
-            log += ' - Alpha: {}'.format(optim.alpha)
-            log += ' - Batch: {}/{}'.format(batch_i+1, len(input_batches))
-            log += ' - Loss: {}'.format(total_loss / (batch_i+1))
-            if batch_i % 1 == 0:
-                sys.stdout.write(log)
-
-        optim.alpha *= 0.99
-
-
-train(100)
-
-
-def generate_sample(n=30, init_char=' '):
-    s = ' '
-    hidden = model.init_hidden(batch_size=1)
-    input = Tensor(np.array([word2index[init_char]]))
-    for i in range(n):
-        rnn_input = embed.forward(input)
-        output, hidden = model.forward(input=rnn_input,
-                                       hidden=hidden)
-        output.data *= 10
-        temp_dist = output.softmax()
-        temp_dist /= temp_dist.sum()
-
-        m = (temp_dist > np.random.rand()).argmax()
-        c = vocab[m]
-        input = Tensor(np.array([m]))
-        s += c
-    return s
-
-
-print(generate_sample(n=2000, init_char='\n'))
-
+    target = Tensor(data[0:batch_size, t+1], autograd=True)
+    loss = criterion.forward(output, target)
+    loss.backward()
+    optim.step()
+    total_loss += loss.data
+    if iter % 200 == 0:
+        p_correct = (target.data == np.argmax(output.data,axis=1)).mean()
+        print_loss = total_loss / (len(data)/batch_size)
+        print("Loss:", print_loss, "% Correct:", p_correct)

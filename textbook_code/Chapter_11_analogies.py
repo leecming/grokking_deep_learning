@@ -3,11 +3,11 @@ import numpy as np
 from collections import Counter
 import pickle as pl
 
-with open('data/reviews.txt') as f:
+with open('../data/reviews.txt') as f:
     raw_reviews = f.readlines()
 
-word2index = pl.load(open('data/word2index_imdb.p', 'rb'))
-weights_0_1 = np.load('data/imdb_weights_0_1.npy', allow_pickle=True)
+word2index = pl.load(open('../data/word2index_imdb.p', 'rb'))
+weights_0_1 = np.load('../data/imdb_weights_0_1.npy', allow_pickle=True)
 
 
 def analogy(positive=['terrible', 'good'], negative=['bad']):

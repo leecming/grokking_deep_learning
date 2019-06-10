@@ -362,57 +362,41 @@ class Tensor:
         return str(self.data.__str__())
 
 
-class LSTMCell(Layer):
-    def __init__(self, n_inputs, n_hidden, n_output):
+class RNNCell(Layer):
+    def __init__(self,
+                 n_inputs,
+                 n_hidden,
+                 n_output,
+                 activation='sigmoid'):
         super().__init__()
-
         self.n_inputs = n_inputs
         self.n_hidden = n_hidden
         self.n_output = n_output
 
-        self.xf = Linear(n_inputs, n_hidden)
-        self.xi = Linear(n_inputs, n_hidden)
-        self.xo = Linear(n_inputs, n_hidden)
-        self.xc = Linear(n_inputs, n_hidden)
-        self.hf = Linear(n_hidden, n_hidden, bias=False)
-        self.hi = Linear(n_hidden, n_hidden, bias=False)
-        self.ho = Linear(n_hidden, n_hidden, bias=False)
-        self.hc = Linear(n_hidden, n_hidden, bias=False)
+        if activation == 'sigmoid':
+            self.activation = Sigmoid()
+        elif activation == 'tanh':
+            self.activation = Tanh()
+        else:
+            raise Exception("Non-linearity not found")
 
-        self.w_ho = Linear(n_hidden, n_output, bias=False)
+        self.w_ih = Linear(n_inputs, n_hidden, name='RNN w_ih')
+        self.w_hh = Linear(n_hidden, n_hidden, name='RNN w_hh')
+        self.w_ho = Linear(n_hidden, n_output, name='RNN w_ho')
 
-        self.parameters += self.xf.get_parameters()
-        self.parameters += self.xi.get_parameters()
-        self.parameters += self.xo.get_parameters()
-        self.parameters += self.xc.get_parameters()
-        self.parameters += self.hf.get_parameters()
-        self.parameters += self.hi.get_parameters()
-        self.parameters += self.ho.get_parameters()
-        self.parameters += self.hc.get_parameters()
-
+        self.parameters += self.w_ih.get_parameters()
+        self.parameters += self.w_hh.get_parameters()
         self.parameters += self.w_ho.get_parameters()
 
     def forward(self, input, hidden):
-        prev_hidden = hidden[0]
-        prev_cell = hidden[1]
-
-        f = (self.xf.forward(input) + self.hf.forward(prev_hidden)).sigmoid()
-        i = (self.xi.forward(input) + self.hi.forward(prev_hidden)).sigmoid()
-        o = (self.xo.forward(input) + self.ho.forward(prev_hidden)).sigmoid()
-        g = (self.xc.forward(input) + self.hc.forward(prev_hidden)).tanh()
-        cell = (f * prev_cell) + (i * g)
-        h = o * cell.tanh()
-
-        output = self.w_ho.forward(h)
-        return output, (h, cell)
+        from_prev_hidden = self.w_hh.forward(hidden)
+        combined = self.w_ih.forward(input) + from_prev_hidden
+        new_hidden = self.activation.forward(combined)
+        output = self.w_ho.forward(new_hidden)
+        return output, new_hidden
 
     def init_hidden(self, batch_size=1):
-        h = Tensor(np.zeros((batch_size, self.n_hidden)), autograd=True)
-        c = Tensor(np.zeros((batch_size, self.n_hidden)), autograd=True)
-        h.data[:, 0] += 1
-        c.data[:, 0] += 1
-
-        return (h, c)
+        return Tensor(np.zeros((batch_size, self.n_hidden)), autograd=True)
 
 
 class Tanh(Layer):
@@ -431,7 +415,7 @@ class Sigmoid(Layer):
         return input.sigmoid()
 
 
-with open('data/shakespear.txt', 'r') as f:
+with open('../data/shakespear.txt', 'r') as f:
     raw = f.read()
 
 vocab = list(set(raw))
@@ -441,14 +425,13 @@ for i, word in enumerate(vocab):
 indices = np.array(list(map(lambda x: word2index[x], raw)))
 
 embed = Embedding(vocab_size=len(vocab), dim=512)
-model = LSTMCell(n_inputs=512, n_hidden=512, n_output=len(vocab))
-model.w_ho.weight.data *= 0
+model = RNNCell(n_inputs=512, n_hidden=512, n_output=len(vocab))
 
 criterion = CrossEntropyLoss()
 optim = SGD(parameters=model.get_parameters() + embed.get_parameters(), alpha=0.01)
 
-batch_size = 16
-bptt = 25
+batch_size = 32
+bptt = 16
 n_batches = int((indices.shape[0] / batch_size))
 trimmed_indices = indices[:n_batches*batch_size]
 # batch_indices: each column represents a sub-sequence from indices -> continuous
@@ -479,17 +462,14 @@ print('raw indices: {}'.format(indices[:16]))
 
 
 def train(iterations=100):
-    min_loss = 1000
     for iter in range(iterations):
         total_loss = 0
         n_loss = 0
 
         hidden = model.init_hidden(batch_size=batch_size)
         for batch_i in range(len(input_batches)):
-            hidden = (Tensor(hidden[0].data, autograd=True),
-                      Tensor(hidden[1].data, autograd=True))
-
-            losses = list()
+            hidden = Tensor(hidden.data, autograd=True)
+            loss = None
             for t in range(bptt):
                 # print('t: {}'.format(t))
                 input = Tensor(input_batches[batch_i][t], autograd=True)
@@ -506,25 +486,18 @@ def train(iterations=100):
                 # batch_loss.backward() # delete
 
                 if t == 0:
-                    losses.append(batch_loss)
+                    loss = batch_loss
                 else:
-                    losses.append(batch_loss + losses[-1])
+                    loss = loss + batch_loss
 
-            loss = losses[-1]
             loss.backward()
             optim.step()
-            total_loss += loss.data / bptt
-            epoch_loss = np.exp(total_loss / (batch_i + 1))
-
-            if epoch_loss < min_loss:
-                min_loss = epoch_loss
-                print()
+            total_loss += loss.data
 
             log = '\r Iter:{}'.format(iter)
             log += ' - Alpha: {}'.format(optim.alpha)
             log += ' - Batch: {}/{}'.format(batch_i+1, len(input_batches))
-            log += ' - Min Loss: {}'.format(min_loss)
-            log += ' - Loss: {}'.format(epoch_loss)
+            log += ' - Loss: {}'.format(total_loss / (batch_i+1))
             if batch_i % 1 == 0:
                 sys.stdout.write(log)
 

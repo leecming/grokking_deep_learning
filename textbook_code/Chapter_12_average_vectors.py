@@ -2,15 +2,15 @@ import numpy as np
 from collections import Counter
 import pickle as pl
 
-with open('data/reviews.txt') as f:
+with open('../data/reviews.txt') as f:
     raw_reviews = f.readlines()
 
 tokens = list(map(lambda x: (x.split(" ")), raw_reviews))
-word2index = pl.load(open('data/word2index_imdb.p', 'rb'))
+word2index = pl.load(open('../data/word2index_imdb.p', 'rb'))
 
 
-weights_0_1 = np.load('data/imdb_weights_0_1.npy', allow_pickle=True)
-weights_1_2 = np.load('data/imdb_weights_1_2.npy', allow_pickle=True)
+weights_0_1 = np.load('../data/imdb_weights_0_1.npy', allow_pickle=True)
+weights_1_2 = np.load('../data/imdb_weights_1_2.npy', allow_pickle=True)
 
 norms = np.sum(weights_0_1 * weights_0_1, axis=1)
 norms.resize(norms.shape[0], 1)

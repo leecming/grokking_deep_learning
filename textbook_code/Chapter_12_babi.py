@@ -4,7 +4,7 @@ import math
 from collections import Counter
 import numpy as np
 
-with open('data/tasksv11/en/qa1_single-supporting-fact_train.txt', 'r') as f:
+with open('../data/tasksv11/en/qa1_single-supporting-fact_train.txt', 'r') as f:
     raw = f.readlines()
 
 tokens = list()
